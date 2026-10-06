@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quantum Breeze — محاكاة تفاعلية</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; user-select:none; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#03060d; color:#e8f4ff;
+    font-family:'Segoe UI', Tahoma, Arial, sans-serif; }
+  #app { position:fixed; inset:0; }
+
+  /* ========== HUD LAYER ========== */
+  #hud { position:fixed; inset:0; pointer-events:none; z-index:10; font-size:12px; }
+  #hud .panel { pointer-events:auto; }
+
+  .panel {
+    background:linear-gradient(160deg, rgba(8,20,38,0.88), rgba(4,10,22,0.82));
+    border:1px solid rgba(80,200,255,0.22);
+    border-radius:12px;
+    backdrop-filter: blur(14px);
+    box-shadow:0 6px 26px rgba(0,10,30,0.5);
+    transition: all .3s ease;
+  }
+
+  /* ========== TOP BAR ========== */
+  #topbar {
+    position:absolute; top:10px; left:10px; right:10px; height:44px;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 14px; pointer-events:auto;
+  }
+  #topbar .brand {
+    display:flex; align-items:center; gap:10px;
+    font-size:15px; font-weight:800; letter-spacing:.6px;
+    background:linear-gradient(90deg,#5ff2ff,#3aa8ff,#a06bff);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 0 22px rgba(90,200,255,0.35);
+  }
+  #topbar .brand .dot-live {
+    width:7px; height:7px; border-radius:50%; background:#5cffb0;
+    box-shadow:0 0 10px #5cffb0; animation:pulse 1.6s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  #topbar .brand small {
+    font-size:10px; font-weight:500; color:#7fb8d8; letter-spacing:.3px;
+    background:none; -webkit-text-fill-color:#7fb8d8;
+  }
+  #topbar .actions { display:flex; gap:6px; }
+
+  .icon-btn {
+    display:flex; align-items:center; gap:5px;
+    padding:6px 11px; font-size:11px; font-weight:600; cursor:pointer;
+    background:linear-gradient(160deg, rgba(20,50,80,0.9), rgba(10,25,45,0.9));
+    border:1px solid rgba(80,200,255,0.28); border-radius:8px; color:#bfe6ff;
+    transition:all .18s; font-family:inherit;
+  }
+  .icon-btn:hover {
+    background:linear-gradient(160deg, rgba(30,80,130,0.95), rgba(15,40,70,0.95));
+    border-color:rgba(100,220,255,0.6); color:#fff;
+  }
+  .icon-btn.warn { border-color:rgba(255,120,80,0.4); color:#ff9a70; }
+  .icon-btn.warn:hover { background:linear-gradient(160deg,#8a2a1a,#5a1a10); border-color:#ff7a4c; }
+
+  /* ========== LEFT STACK ========== */
+  #leftStack {
+    position:absolute; top:64px; left:10px; width:230px;
+    display:flex; flex-direction:column; gap:8px;
+  }
+
+  /* ========== PANEL GENERIC ========== */
+  .mini-panel { padding:0; overflow:hidden; }
+  .mini-panel .head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; cursor:pointer; user-select:none;
+    border-bottom:1px solid rgba(80,200,255,0.1);
+  }
+  .mini-panel .head h3 {
+    font-size:10.5px; color:#5fa8d8; letter-spacing:1.3px; text-transform:uppercase;
+    font-weight:700;
+  }
+  .mini-panel .head .chev {
+    font-size:10px; color:#5fa8d8; transition:transform .3s;
+  }
+  .mini-panel.collapsed .head .chev { transform:rotate(-90deg); }
+  .mini-panel .body {
+    padding:10px 12px; max-height:400px; overflow:hidden;
+    transition:max-height .35s ease, padding .35s ease, opacity .25s ease;
+    opacity:1;
+  }
+  .mini-panel.collapsed .body {
+    max-height:0; padding-top:0; padding-bottom:0; opacity:0;
+  }
+
+  /* ========== TELEMETRY ROWS ========== */
+  .tel-row {
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:11.5px; padding:3.5px 0; color:#8ab6d4;
+  }
+  .tel-row .v { font-weight:700; font-variant-numeric:tabular-nums; color:#7fe9ff; }
+  .tel-row .v.g { color:#5cffb0; }
+  .tel-row .v.a { color:#ffc46b; }
+  .tel-row .v.m { color:#c48bff; }
+
+  .bar { height:3px; border-radius:3px; background:rgba(255,255,255,0.07); overflow:hidden; margin-top:6px;}
+  .bar > div { height:100%; border-radius:3px; transition:width .4s;
+    background:linear-gradient(90deg,#2ad8a0,#5cffb0); }
+
+  /* ========== CHART ========== */
+  #chartWrap { margin-top:9px; padding-top:7px; border-top:1px solid rgba(80,200,255,0.12); }
+  #chartCanvas { width:100%; height:44px; display:block; border-radius:5px; background:rgba(0,20,40,0.55); }
+  #chartLegend { display:flex; gap:10px; font-size:9.5px; color:#8ab6d4; margin-top:4px; justify-content:center;}
+  #chartLegend span::before { content:'●'; margin-left:3px; }
+  .c-ret::before { color:#ff7a3c; }
+  .c-sup::before { color:#5cffb0; }
+
+  /* ========== CONTROLS ========== */
+  .ctl-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-bottom:8px; }
+  .ctl-grid .span2 { grid-column:span 2; }
+
+  .btn {
+    padding:6px 8px; font-size:11px; font-weight:600; cursor:pointer;
+    background:linear-gradient(160deg, rgba(20,50,80,0.9), rgba(10,25,45,0.9));
+    border:1px solid rgba(80,200,255,0.28); border-radius:7px; color:#bfe6ff;
+    transition:all .18s; font-family:inherit;
+  }
+  .btn:hover {
+    background:linear-gradient(160deg, rgba(30,80,130,0.95), rgba(15,40,70,0.95));
+    border-color:rgba(100,220,255,0.6); color:#fff;
+  }
+  .btn.active {
+    background:linear-gradient(160deg,#1c6fa8,#0d4570); border-color:#4fd0ff; color:#fff;
+    box-shadow:0 0 12px rgba(80,200,255,0.4);
+  }
+  .btn.tour { background:linear-gradient(160deg,#7a35b8,#4a1a78); border-color:#c48bff; color:#fff; }
+  .btn.tour:hover { background:linear-gradient(160deg,#9845d8,#5f22a0); }
+  .btn.tour.active { background:linear-gradient(160deg,#c04040,#7a1a1a); border-color:#ff8080; }
+
+  .slider-row {
+    display:flex; align-items:center; gap:8px;
+    font-size:10.5px; color:#8ab6d4; margin-top:6px;
+  }
+  .slider-row input[type=range] {
+    flex:1; -webkit-appearance:none; height:3px; border-radius:2px;
+    background:linear-gradient(90deg,#2aa8ff,#5ff2ff); outline:none;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:11px; height:11px; border-radius:50%;
+    background:#fff; box-shadow:0 0 7px #2aa8ff; cursor:pointer;
+  }
+  .slider-row .v { width:34px; text-align:center; color:#7fe9ff; font-weight:700; font-size:10.5px; }
+
+  /* ========== RIGHT STACK (Info Card) ========== */
+  #infoCard {
+    position:absolute; top:64px; right:10px; width:270px;
+    opacity:0; transform:translateX(20px); pointer-events:none;
+    transition: opacity .35s, transform .35s;
+  }
+  #infoCard.show { opacity:1; transform:translateX(0); pointer-events:auto; }
+  #infoCard .head-bar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 12px; border-bottom:1px solid rgba(80,200,255,0.1);
+  }
+  #infoCard .num-badge {
+    font-size:9.5px; font-weight:800; letter-spacing:1.6px;
+    padding:2.5px 8px; border-radius:20px;
+  }
+  #infoCard .close-btn {
+    font-size:12px; color:#7fb8d8; cursor:pointer; padding:2px 6px; border-radius:5px;
+    transition:all .15s;
+  }
+  #infoCard .close-btn:hover { background:rgba(255,120,80,0.2); color:#ff9a70; }
+  #infoCard .content { padding:10px 13px 13px; }
+  #infoCard h2 { font-size:14.5px; font-weight:800; margin-bottom:5px; letter-spacing:.2px; line-height:1.3; }
+  #infoCard p { font-size:11px; color:#a8c8de; line-height:1.65; margin-bottom:9px; }
+  #infoCard .facts { display:flex; flex-direction:column; gap:4px; }
+  #infoCard .fact {
+    display:flex; justify-content:space-between; font-size:10.5px;
+    padding:4px 8px; background:rgba(255,255,255,0.04); border-radius:5px;
+    border-right:2px solid currentColor;
+  }
+  #infoCard .fact .k { color:#8ab6d4; }
+  #infoCard .fact .v { font-weight:700; }
+
+  /* ========== TIMELINE ========== */
+  #timeline {
+    position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
+    display:flex; align-items:center; padding:9px 18px;
+  }
+  .step-btn {
+    position:relative; display:flex; flex-direction:column; align-items:center;
+    cursor:pointer; padding:0 4px; min-width:60px;
+  }
+  .step-btn .circle {
+    width:28px; height:28px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:12px; color:#7fb8d8;
+    background:rgba(10,25,45,0.9); border:2px solid rgba(80,200,255,0.28);
+    transition:all .25s; z-index:2;
+  }
+  .step-btn .lbl-step {
+    font-size:9.5px; color:#7fb8d8; margin-top:4px; white-space:nowrap;
+    transition:color .25s; letter-spacing:.2px;
+  }
+  .step-btn:hover .circle { border-color:#7fe9ff; color:#fff; transform:scale(1.08); }
+  .step-btn.active .circle {
+    background:linear-gradient(160deg,#2aa8ff,#0d6fc8); border-color:#5ff2ff; color:#fff;
+    box-shadow:0 0 15px rgba(80,200,255,0.7), inset 0 0 10px rgba(255,255,255,0.2);
+  }
+  .step-btn.active .lbl-step { color:#fff; font-weight:700; }
+  .step-btn.done .circle { border-color:#5cffb0; color:#5cffb0; }
+
+  .step-line { width:16px; height:2px; background:rgba(80,200,255,0.22); margin-bottom:14px; }
+  .step-line.done { background:linear-gradient(90deg,#5cffb0,#2aa8ff); }
+
+  /* ========== LEGEND ========== */
+  #legend {
+    position:absolute; bottom:12px; right:10px; padding:8px 12px;
+    max-width:200px;
+  }
+  #legend .leg-head {
+    font-size:9.5px; color:#5fa8d8; letter-spacing:1.2px; text-transform:uppercase;
+    font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:space-between;
+  }
+  #legend .leg-head .chev { transition:transform .3s; font-size:9px; }
+  #legend.collapsed .leg-head .chev { transform:rotate(-90deg); }
+  #legend .leg-body {
+    margin-top:7px; max-height:200px; overflow:hidden;
+    transition: max-height .35s, margin .35s, opacity .25s;
+    opacity:1;
+  }
+  #legend.collapsed .leg-body { max-height:0; margin-top:0; opacity:0; }
+  #legend .item { display:flex; align-items:center; gap:6px; font-size:10.5px; margin:3px 0; color:#c5e2f5;}
+  #legend .dot { width:7px; height:7px; border-radius:50%; box-shadow:0 0 8px currentColor; background:currentColor; flex-shrink:0;}
+
+  /* ========== VIGNETTE / TOAST ========== */
+  #vignette {
+    position:absolute; inset:0; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%);
+    transition:background .5s;
+  }
+  #vignette.focus { background:radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,0.72) 100%); }
+
+  #toast {
+    position:absolute; top:76px; left:50%; transform:translate(-50%,-6px);
+    font-size:12px; font-weight:600; color:#7fe9ff; padding:8px 20px;
+    background:rgba(8,30,55,0.92); border:1px solid rgba(80,200,255,0.5);
+    border-radius:20px; opacity:0; transition:all .4s; pointer-events:none;
+    box-shadow:0 0 30px rgba(80,200,255,0.4); letter-spacing:.4px;
+    white-space:nowrap;
+  }
+  #toast.show { opacity:1; transform:translate(-50%,0); }
+
+  /* ========== HIDE-ALL MODE ========== */
+  body.ui-hidden #hud .panel,
+  body.ui-hidden #topbar,
+  body.ui-hidden #leftStack,
+  body.ui-hidden #infoCard,
+  body.ui-hidden #timeline,
+  body.ui-hidden #legend {
+    opacity:0; transform:translateY(-6px); pointer-events:none;
+  }
+  #hud .panel, #topbar, #leftStack, #infoCard, #timeline, #legend {
+    transition: opacity .35s, transform .35s;
+  }
+
+  #showUiBtn {
+    position:absolute; top:10px; right:10px; display:none;
+    padding:8px 14px; font-size:11px; font-weight:600; cursor:pointer;
+    background:linear-gradient(160deg, rgba(20,50,80,0.92), rgba(10,25,45,0.92));
+    border:1px solid rgba(80,200,255,0.45); border-radius:10px; color:#7fe9ff;
+    font-family:inherit; pointer-events:auto;
+    box-shadow:0 0 20px rgba(80,200,255,0.25);
+  }
+  body.ui-hidden #showUiBtn { display:block; }
+
+  /* ========== HINT (bottom-left, minimal) ========== */
+  #hint {
+    position:absolute; bottom:12px; left:10px;
+    font-size:10px; color:#5a86a8; padding:6px 10px;
+    background:rgba(8,20,38,0.55); border-radius:8px;
+    border:1px solid rgba(80,200,255,0.1);
+  }
+  kbd {
+    display:inline-block; padding:1px 4px; font-size:9px; font-family:monospace;
+    background:rgba(80,200,255,0.14); border:1px solid rgba(80,200,255,0.28);
+    border-radius:3px; color:#7fe9ff;
+  }
+
+  /* ========== RESPONSIVE ========== */
+  @media (max-width: 900px) {
+    #leftStack { width:190px; }
+    #infoCard { width:230px; }
+    #legend { display:none; }
+    #hint { display:none; }
+    .step-btn .lbl-step { display:none; }
+    .step-btn { min-width:44px; }
+  }
+  @media (max-width: 620px) {
+    #leftStack { width:170px; top:60px; }
+    #infoCard { width:210px; top:60px; right:6px; }
+    #topbar .brand small { display:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud">
+  <div id="vignette"></div>
+
+  <!-- ========== TOP BAR ========== -->
+  <div class="panel" id="topbar">
+    <div class="brand">
+      <span class="dot-live"></span>
+      QUANTUM BREEZE <small>· تكييف بلا ضاغط · بلا غاز</small>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" id="btnHideUi" title="إخفاء الواجهة (H)">👁 إخفاء</button>
+    </div>
+  </div>
+  <button id="showUiBtn" title="إظهار الواجهة (H)">👁 إظهار الواجهة</button>
+
+  <!-- ========== LEFT STACK ========== -->
+  <div id="leftStack">
+
+    <!-- Telemetry -->
+    <div class="panel mini-panel" id="panelTel">
+      <div class="head" data-toggle="panelTel">
+        <h3>Live Telemetry</h3>
+        <span class="chev">▾</span>
+      </div>
+      <div class="body">
+        <div class="tel-row"><span>هواء الرجوع</span><span class="v a" id="t-return">32.4 °C</span></div>
+        <div class="tel-row"><span>بعد التجفيف</span><span class="v" id="t-dry">30.1 °C</span></div>
+        <div class="tel-row"><span>قلب مغناطيسي</span><span class="v m" id="t-mag">18.6 °C</span></div>
+        <div class="tel-row"><span>خزان PCM</span><span class="v g" id="t-pcm">14.2 °C</span></div>
+        <div class="tel-row"><span>هواء الإمداد</span><span class="v g" id="t-supply">13.8 °C</span></div>
+        <div class="tel-row"><span>قدرة الضاغط</span><span class="v g">0.00 kW</span></div>
+        <div class="tel-row"><span>COP الفعلي</span><span class="v g" id="cop">7.40</span></div>
+        <div class="tel-row"><span>وفر الكهرباء</span><span class="v g" id="save">78 %</span></div>
+        <div class="bar"><div id="bar-save" style="width:78%"></div></div>
+
+        <div id="chartWrap">
+          <canvas id="chartCanvas" width="440" height="90"></canvas>
+          <div id="chartLegend">
+            <span class="c-ret">هواء رجوع</span>
+            <span class="c-sup">هواء إمداد</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="panel mini-panel" id="panelCtl">
+      <div class="head" data-toggle="panelCtl">
+        <h3>Control Panel</h3>
+        <span class="chev">▾</span>
+      </div>
+      <div class="body">
+        <div class="ctl-grid">
+          <button class="btn" id="btnPlay">⏸ إيقاف</button>
+          <button class="btn" id="btnReset">⟲ إعادة</button>
+          <button class="btn tour span2" id="btnTour">▶ جولة تلقائية</button>
+        </div>
+        <div class="slider-row">
+          <span>السرعة</span>
+          <input type="range" id="speedSlider" min="0.1" max="3" step="0.1" value="1" />
+          <span class="v" id="speedVal">1.0×</span>
+        </div>
+        <div class="slider-row">
+          <span>شفافية</span>
+          <input type="range" id="opacitySlider" min="10" max="100" step="1" value="55" />
+          <span class="v" id="opacityVal">55%</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========== INFO CARD (Right) ========== -->
+  <div class="panel" id="infoCard">
+    <div class="head-bar">
+      <div class="num-badge" id="infoBadge">01</div>
+      <div class="close-btn" id="btnCloseInfo" title="إغلاق">✕</div>
+    </div>
+    <div class="content">
+      <h2 id="infoTitle">—</h2>
+      <p id="infoDesc">—</p>
+      <div class="facts" id="infoFacts"></div>
+    </div>
+  </div>
+
+  <!-- ========== LEGEND ========== -->
+  <div class="panel" id="legend">
+    <div class="leg-head" data-toggle="legend">
+      <span>Technologies · 5</span>
+      <span class="chev">▾</span>
+    </div>
+    <div class="leg-body">
+      <div class="item" style="color:#c48bff"><span class="dot"></span>1 · تبريد إشعاعي فضائي</div>
+      <div class="item" style="color:#7fe9ff"><span class="dot"></span>2 · تجفيف شمسي</div>
+      <div class="item" style="color:#ff8a5c"><span class="dot"></span>3 · تبريد مغناطيسي</div>
+      <div class="item" style="color:#5cffb0"><span class="dot"></span>4 · تخزين PCM</div>
+      <div class="item" style="color:#ffd75c"><span class="dot"></span>5 · تحكم ذكاء اصطناعي</div>
+    </div>
+  </div>
+
+  <!-- ========== TIMELINE ========== -->
+  <div class="panel" id="timeline">
+    <div class="step-btn" data-step="0">
+      <div class="circle">0</div><div class="lbl-step">نظرة عامة</div>
+    </div>
+    <div class="step-line" data-line="0"></div>
+    <div class="step-btn" data-step="1">
+      <div class="circle">1</div><div class="lbl-step">تجفيف شمسي</div>
+    </div>
+    <div class="step-line" data-line="1"></div>
+    <div class="step-btn" data-step="2">
+      <div class="circle">2</div><div class="lbl-step">تبريد مغناطيسي</div>
+    </div>
+    <div class="step-line" data-line="2"></div>
+    <div class="step-btn" data-step="3">
+      <div class="circle">3</div><div class="lbl-step">خزان PCM</div>
+    </div>
+    <div class="step-line" data-line="3"></div>
+    <div class="step-btn" data-step="4">
+      <div class="circle">4</div><div class="lbl-step">إشعاع فضائي</div>
+    </div>
+    <div class="step-line" data-line="4"></div>
+    <div class="step-btn" data-step="5">
+      <div class="circle">5</div><div class="lbl-step">AI وتوزيع</div>
+    </div>
+  </div>
+
+  <div id="hint">🖱️ اسحب · عجلة للتقريب · <kbd>1-6</kbd> للتنقل · <kbd>Space</kbd> تشغيل · <kbd>H</kbd> إخفاء الواجهة</div>
+  <div id="toast"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ============================================================
+   RENDERER / SCENE / CAMERA
+   ============================================================ */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x03060d, 0.011);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 500);
+camera.position.set(2, 14, 26);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(-3, 3.5, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 2;
+controls.maxDistance = 80;
+controls.maxPolarAngle = Math.PI * 0.495;
+
+/* ============================================================
+   LIGHTS
+   ============================================================ */
+scene.add(new THREE.AmbientLight(0x203850, 1.1));
+const moon = new THREE.DirectionalLight(0x88bbff, 0.55); moon.position.set(-20,30,18); scene.add(moon);
+const keyLight = new THREE.DirectionalLight(0xffffff, 0.35); keyLight.position.set(15,22,10); scene.add(keyLight);
+
+const lightCyan  = new THREE.PointLight(0x33ddff, 40, 18, 2); lightCyan.position.set(-4.5, 4, 0); scene.add(lightCyan);
+const lightMag   = new THREE.PointLight(0xc06bff, 45, 22, 2); lightMag.position.set(-8, 8, 0);  scene.add(lightMag);
+const lightWarm  = new THREE.PointLight(0xff7a3c, 30, 16, 2); lightWarm.position.set(-13, 4, 0); scene.add(lightWarm);
+const lightGreen = new THREE.PointLight(0x40ff9e, 25, 16, 2); lightGreen.position.set(-2, 3, 0);  scene.add(lightGreen);
+
+/* ============================================================
+   STARFIELD
+   ============================================================ */
+(function stars(){
+  const N = 1400;
+  const pos = new Float32Array(N*3), col = new Float32Array(N*3);
+  for(let i=0;i<N;i++){
+    const r = 90 + Math.random()*140, th = Math.random()*Math.PI*2, ph = Math.acos(Math.random()*0.9+0.05);
+    pos[i*3]   = r*Math.sin(ph)*Math.cos(th);
+    pos[i*3+1] = r*Math.cos(ph) + 12;
+    pos[i*3+2] = r*Math.sin(ph)*Math.sin(th);
+    const t = Math.random();
+    col[i*3] = 0.6+t*0.4; col[i*3+1] = 0.7+t*0.3; col[i*3+2] = 1.0;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  g.setAttribute('color', new THREE.BufferAttribute(col,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({
+    size:0.55, vertexColors:true, transparent:true, opacity:0.9,
+    depthWrite:false, blending:THREE.AdditiveBlending
+  })));
+})();
+
+/* ============================================================
+   GROUND
+   ============================================================ */
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(220,220),
+  new THREE.MeshStandardMaterial({ color:0x050a14, roughness:0.95, metalness:0.05 }));
+ground.rotation.x = -Math.PI/2; ground.position.y = -0.02; scene.add(ground);
+
+const grid = new THREE.GridHelper(120, 60, 0x0e3a5c, 0x0a2540);
+grid.position.y = 0.01; grid.material.transparent = true; grid.material.opacity = 0.35; scene.add(grid);
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function mat(color, opts={}) {
+  return new THREE.MeshStandardMaterial({
+    color, roughness: opts.rough ?? 0.5, metalness: opts.metal ?? 0.6,
+    emissive: opts.emissive ?? 0x000000, emissiveIntensity: opts.ei ?? 1,
+    transparent: opts.transparent ?? false, opacity: opts.opacity ?? 1,
+    side: opts.side ?? THREE.FrontSide, flatShading: !!opts.flat
+  });
+}
+function box(w,h,d,c,o={}) { return new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat(c,o)); }
+function cyl(rt,rb,h,c,o={}) { return new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,o.seg??32,1,!!o.open), mat(c,o)); }
+
+function makeLabel(text, color='#7fe9ff', scale=3.2) {
+  const c = document.createElement('canvas'); c.width=640; c.height=160;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold 64px "Segoe UI", Tahoma, sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.shadowColor = color; ctx.shadowBlur = 28; ctx.fillStyle = color;
+  ctx.fillText(text, 320, 80);
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthTest:false, depthWrite:false }));
+  sp.scale.set(scale, scale*0.25, 1); sp.renderOrder = 999;
+  return sp;
+}
+function honeycombTexture(){
+  const c = document.createElement('canvas'); c.width=c.height=512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#062036'; ctx.fillRect(0,0,512,512);
+  ctx.strokeStyle = '#2b90d0'; ctx.lineWidth = 3;
+  for(let i=0;i<80;i++){
+    const a = i/80*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(256+Math.cos(a)*34, 256+Math.sin(a)*34);
+    ctx.lineTo(256+Math.cos(a)*252, 256+Math.sin(a)*252);
+    ctx.stroke();
+  }
+  for(let r=34;r<252;r+=22){ ctx.beginPath(); ctx.arc(256,256,r,0,Math.PI*2); ctx.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 8; return t;
+}
+function makeDotTexture(){
+  if (makeDotTexture._t) return makeDotTexture._t;
+  const c = document.createElement('canvas'); c.width=c.height=64;
+  const ctx = c.getContext('2d');
+  const g = ctx.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  g.addColorStop(0.35,'rgba(255,255,255,0.65)');
+  g.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,64,64);
+  const t = new THREE.CanvasTexture(c); makeDotTexture._t = t; return t;
+}
+
+/* ============================================================
+   PARTICLE FLOW ENGINE
+   ============================================================ */
+class Flow {
+  constructor(pathPts, count, color, size, speed, opts={}) {
+    this.path = pathPts.map(p => p.clone());
+    this.speed = speed; this.count = count;
+    this.positions = new Float32Array(count*3);
+    this.progress  = new Float32Array(count);
+    this.jitter = opts.jitter ?? 0;
+    for(let i=0;i<count;i++) this.progress[i] = Math.random();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(this.positions,3));
+    this.material = new THREE.PointsMaterial({
+      color, size, transparent:true, opacity: opts.opacity ?? 0.95,
+      blending: THREE.AdditiveBlending, depthWrite:false,
+      sizeAttenuation:true, map: makeDotTexture()
+    });
+    this.points = new THREE.Points(g, this.material);
+    this.points.frustumCulled = false;
+    scene.add(this.points);
+    this.baseOpacity = opts.opacity ?? 0.95;
+    this.baseSize = size;
+  }
+  getPointAt(t, out) {
+    const n = this.path.length-1;
+    const ft = Math.max(0, Math.min(0.9999, t)) * n;
+    const i = Math.floor(ft), f = ft - i;
+    out.lerpVectors(this.path[i], this.path[Math.min(i+1,n)], f);
+    return out;
+  }
+  update(dt) {
+    const tmp = _tmpV;
+    for(let i=0;i<this.count;i++){
+      this.progress[i] += dt * this.speed * (0.75 + Math.random()*0.02);
+      if(this.progress[i] > 1) this.progress[i] -= 1;
+      const p = this.getPointAt(this.progress[i], tmp);
+      const j = this.jitter;
+      this.positions[i*3]   = p.x + (j?(Math.random()-0.5)*j:0);
+      this.positions[i*3+1] = p.y + (j?(Math.random()-0.5)*j:0);
+      this.positions[i*3+2] = p.z + (j?(Math.random()-0.5)*j:0);
+    }
+    this.points.geometry.attributes.position.needsUpdate = true;
+  }
+  setHighlight(h) {
+    this.material.opacity = this.baseOpacity * (h ? 1.4 : 1.0);
+    this.material.size = this.baseSize * (h ? 1.35 : 1.0);
+  }
+}
+const _tmpV = new THREE.Vector3();
+
+/* ============================================================
+   BUILDING
+   ============================================================ */
+const buildingGroup = new THREE.Group();
+buildingGroup.position.set(8, 0, 0);
+scene.add(buildingGroup);
+
+const BH = 9, BW = 12, BD = 11;
+const bShell = box(BW, BH, BD, 0x0a1828, { rough:0.25, metal:0.85, transparent:true, opacity:0.55 });
+bShell.position.y = BH/2; buildingGroup.add(bShell);
+
+const edgeMat = new THREE.LineBasicMaterial({ color:0x3fd0ff, transparent:true, opacity:0.55 });
+const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(BW,BH,BD)), edgeMat);
+edges.position.y = BH/2; buildingGroup.add(edges);
+
+const winGeo = new THREE.PlaneGeometry(0.55, 0.35);
+const winMat = new THREE.MeshBasicMaterial({ color:0x7fe4ff, transparent:true, opacity:0.85 });
+const winMat2 = new THREE.MeshBasicMaterial({ color:0xffd27f, transparent:true, opacity:0.7 });
+for(let fy=0; fy<7; fy++){
+  for(let fz=0; fz<9; fz++){
+    const w = new THREE.Mesh(winGeo, Math.random()>0.72?winMat2:winMat);
+    w.position.set(-BW/2-0.02, 1.1+fy*1.15, -BD/2+0.85+fz*1.15);
+    w.rotation.y = -Math.PI/2; buildingGroup.add(w);
+  }
+}
+for(let fy=0; fy<7; fy++){
+  for(let fx=0; fx<10; fx++){
+    const w = new THREE.Mesh(winGeo, Math.random()>0.75?winMat2:winMat);
+    w.position.set(-BW/2+0.8+fx*1.15, 1.1+fy*1.15, BD/2+0.02);
+    buildingGroup.add(w);
+  }
+}
+const parapet = box(BW+0.3, 0.35, BD+0.3, 0x0d2035, { rough:0.4, metal:0.7 });
+parapet.position.y = BH+0.15; buildingGroup.add(parapet);
+
+const supplyVent = box(0.15, 0.9, 1.6, 0x0d2a3c, { emissive:0x1a7fa8, ei:0.9 });
+supplyVent.position.set(-BW/2-0.05, 3.0, 0); buildingGroup.add(supplyVent);
+
+/* ============================================================
+   QUANTUM BREEZE UNIT
+   ============================================================ */
+const unit = new THREE.Group();
+scene.add(unit);
+
+const platform = box(17, 0.6, 8, 0x0a1626, { rough:0.35, metal:0.8 });
+platform.position.set(-8.5, 0.3, 0); unit.add(platform);
+const platformTop = box(17.1, 0.06, 8.1, 0x123048, { rough:0.2, metal:0.9, emissive:0x0a3a55, ei:0.35 });
+platformTop.position.set(-8.5, 0.62, 0); unit.add(platformTop);
+for (const x of [-14.5, -11.5, -8.5, -5.5, -2.0]) {
+  const rail = box(0.18, 0.7, 7.4, 0x1a3a52, { rough:0.4, metal:0.85 });
+  rail.position.set(x, 1.0, 0); unit.add(rail);
+}
+
+/* ---------- [1] DESICCANT WHEEL ---------- */
+const desiccant = new THREE.Group();
+desiccant.position.set(-13.0, 3.0, 0);
+unit.add(desiccant);
+
+const dRing = new THREE.Mesh(new THREE.TorusGeometry(1.75, 0.16, 20, 64),
+  mat(0x2a6a92, { rough:0.35, metal:0.9, emissive:0x0e4a6e, ei:0.6 }));
+dRing.rotation.y = Math.PI/2; desiccant.add(dRing);
+
+const wheelMat = new THREE.MeshStandardMaterial({
+  map: honeycombTexture(), color:0xffffff, roughness:0.65, metalness:0.35,
+  emissive:0x0a4a6e, emissiveIntensity:0.55, transparent:true, opacity:1
+});
+const wheel = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.42, 64), wheelMat);
+wheel.rotation.z = Math.PI/2; desiccant.add(wheel);
+
+const dHub = cyl(0.28,0.28,0.55, 0x3aa8e0, { rough:0.3, metal:0.9, emissive:0x1878a8, ei:0.9 });
+dHub.rotation.z = Math.PI/2; desiccant.add(dHub);
+
+const beadsGroup = new THREE.Group();
+const beadMat = new THREE.MeshStandardMaterial({ color:0xfff0b0, roughness:0.4, metalness:0.1, emissive:0x8a6a20, emissiveIntensity:0.5 });
+for(let i=0;i<48;i++){
+  const a = (i/48)*Math.PI*2;
+  const r = 0.4 + Math.random()*1.0;
+  const y = (Math.random()-0.5)*0.35;
+  const bead = new THREE.Mesh(new THREE.SphereGeometry(0.055 + Math.random()*0.03, 8, 8), beadMat);
+  bead.position.set(y, Math.cos(a)*r, Math.sin(a)*r);
+  beadsGroup.add(bead);
+}
+desiccant.add(beadsGroup);
+beadsGroup.visible = false;
+
+const solar = box(2.6, 0.08, 2.2, 0x0a1e33, { rough:0.2, metal:0.9, emissive:0x1a5a8a, ei:0.7 });
+solar.position.set(-13.0, 5.6, 0); solar.rotation.x = -0.25; unit.add(solar);
+const solarGlass = box(2.4, 0.02, 2.0, 0x2aa8ff, { emissive:0x2aa8ff, ei:1.4, transparent:true, opacity:0.35 });
+solarGlass.position.set(-13.0, 5.66, 0); solarGlass.rotation.x = -0.25; unit.add(solarGlass);
+
+const lblDesiccant = makeLabel('تجفيف شمسي', '#7fe9ff', 3.4);
+lblDesiccant.position.set(-13.0, 6.6, 0); unit.add(lblDesiccant);
+
+/* ============================================================
+   ✅ [2] MAGNETOCALORIC CORE — REBUILT TO MATCH VIDEO
+   ============================================================
+   Key visual elements from the reference video:
+   • Two coaxial cylinders (magnetic circuit)
+   • Permanent magnets embedded in rotating outer cylinder
+   • AMR (Active Magnetic Regenerator) stationary in center
+   • Hydraulic system (cold & hot fluid flow, synchronized)
+   • Rotation of magnet assembly around stationary AMR
+   ============================================================ */
+const magnetic = new THREE.Group();
+magnetic.position.set(-8.2, 3.0, 0);
+unit.add(magnetic);
+
+/* ---- Magnetic circuit outer housing (stationary shell) ---- */
+const mHousingMat = new THREE.MeshStandardMaterial({
+  color:0x1a3a55, roughness:0.22, metalness:0.95,
+  transparent:true, opacity:0.30, side:THREE.DoubleSide,
+  emissive:0x0a2a44, emissiveIntensity:0.45
+});
+const mHousing = new THREE.Mesh(new THREE.CylinderGeometry(1.30, 1.30, 3.6, 48, 1, true), mHousingMat);
+mHousing.rotation.z = Math.PI/2;
+magnetic.add(mHousing);
+
+/* ---- End caps (fixed) ---- */
+for (const s of [-1, 1]) {
+  const cap = cyl(1.32, 1.32, 0.14, 0x2a5a7a, { rough:0.28, metal:0.92 });
+  cap.rotation.z = Math.PI/2;
+  cap.position.x = s * 1.75;
+  magnetic.add(cap);
+}
+
+/* ---- Rotating magnet-carrier ring (the magnetic circuit) ---- */
+const magnetCarrier = new THREE.Group();
+magnetic.add(magnetCarrier);
+
+// Two coaxial steel rings
+for (const r of [1.05, 0.72]) {
+  const ringGeo = new THREE.TorusGeometry(r, 0.055, 8, 64);
+  const ringMesh = new THREE.Mesh(ringGeo,
+    mat(0x9fb8d0, { rough:0.25, metal:0.95, emissive:0x305070, ei:0.35 }));
+  ringMesh.rotation.y = Math.PI/2;
+  magnetCarrier.add(ringMesh);
+}
+
+// Permanent magnet segments distributed around the outer ring
+const magnetSegments = [];
+const SEG_COUNT = 8;
+for (let i = 0; i < SEG_COUNT; i++) {
+  const angle = (i / SEG_COUNT) * Math.PI * 2;
+  const innerR = 0.90;
+  const outerR = 1.28;
+
+  // Magnet block (radial orientation) — alternating N/S poles
+  const isNorth = i % 2 === 0;
+  const magnetMat = new THREE.MeshStandardMaterial({
+    color: isNorth ? 0xd04040 : 0x4060d0,   // red = N, blue = S
+    roughness: 0.30, metalness: 0.85,
+    emissive: isNorth ? 0x801010 : 0x102080,
+    emissiveIntensity: 0.55
+  });
+
+  // Each magnet spans an arc — approximate with a wedge-like box
+  const arcWidth = (Math.PI * 2 / SEG_COUNT) * 0.55;
+  const rMid = (innerR + outerR) * 0.5;
+  const boxW = outerR - innerR;
+  const boxH = rMid * arcWidth;
+
+  const seg = new THREE.Mesh(
+    new THREE.BoxGeometry(boxH, 0.35, boxW),
+    magnetMat
+  );
+  // Position around the ring in the Y-Z plane (since cylinder axis is X)
+  seg.position.set(0, Math.cos(angle) * rMid, Math.sin(angle) * rMid);
+  seg.rotation.x = -angle;
+  magnetCarrier.add(seg);
+  magnetSegments.push(seg);
+
+  // N/S label dot
+  const dot = new THREE.Mesh(
+    new THREE.SphereGeometry(0.045, 8, 8),
+    new THREE.MeshBasicMaterial({ color: isNorth ? 0xff6060 : 0x6080ff })
+  );
+  dot.position.set(0.20, Math.cos(angle) * rMid, Math.sin(angle) * rMid);
+  magnetCarrier.add(dot);
+}
+
+/* ---- AMR (Active Magnetic Regenerator) — stationary core ---- */
+const amrGroup = new THREE.Group();
+magnetic.add(amrGroup);
+
+const coreMat = new THREE.MeshStandardMaterial({
+  color: 0xff8a5c, roughness: 0.35, metalness: 0.75,
+  emissive: 0xff5a2a, emissiveIntensity: 0.9
+});
+const mCore = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 3.10, 40, 1, false), coreMat);
+mCore.rotation.z = Math.PI/2;
+amrGroup.add(mCore);
+
+// Layered AMR plates (visualized as thin discs along the core)
+const layersGroup = new THREE.Group();
+const AMR_LAYERS = 18;
+const amrLayerMeshes = [];
+for (let i = 0; i < AMR_LAYERS; i++) {
+  const d = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.64, 0.64, 0.10, 32),
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.30, metalness: 0.80,
+      emissive: 0x88aaff, emissiveIntensity: 0.55
+    })
+  );
+  d.rotation.z = Math.PI/2;
+  d.position.x = -1.35 + i * (2.70 / (AMR_LAYERS - 1));
+  layersGroup.add(d);
+  amrLayerMeshes.push(d);
+}
+amrGroup.add(layersGroup);
+layersGroup.visible = false;
+
+/* ---- Hydraulic system — cold & hot fluid manifolds ---- */
+const hydraulics = new THREE.Group();
+magnetic.add(hydraulics);
+
+// Cold inlet/outlet nozzles (top)
+const coldNozzle = cyl(0.075, 0.075, 0.60, 0x2aa8ff, {
+  rough:0.25, metal:0.9, emissive:0x1878c8, ei:0.85
+});
+coldNozzle.position.set(0, 1.55, 0);
+hydraulics.add(coldNozzle);
+const coldCap = new THREE.Mesh(new THREE.SphereGeometry(0.10, 12, 12),
+  new THREE.MeshStandardMaterial({ color:0x5fd0ff, emissive:0x2aa8ff, emissiveIntensity:0.9 }));
+coldCap.position.set(0, 1.85, 0);
+hydraulics.add(coldCap);
+
+// Hot inlet/outlet nozzles (bottom)
+const hotNozzle = cyl(0.075, 0.075, 0.60, 0xff7a3c, {
+  rough:0.25, metal:0.9, emissive:0xc05020, ei:0.85
+});
+hotNozzle.position.set(0, -1.55, 0);
+hydraulics.add(hotNozzle);
+const hotCap = new THREE.Mesh(new THREE.SphereGeometry(0.10, 12, 12),
+  new THREE.MeshStandardMaterial({ color:0xffb066, emissive:0xff7a3c, emissiveIntensity:0.9 }));
+hotCap.position.set(0, -1.85, 0);
+hydraulics.add(hotCap);
+
+/* ---- Synchronized fluid flows through AMR ---- */
+// Cold flow (blue) — enters top, flows through AMR, exits top-opposite
+const magColdFlow = new Flow([
+  new THREE.Vector3(0, 1.85, 0),
+  new THREE.Vector3(0, 1.20, 0),
+  new THREE.Vector3(0.0, 0.62, 0),
+  new THREE.Vector3(1.35, 0.62, 0),
+  new THREE.Vector3(1.35, 1.20, 0),
+  new THREE.Vector3(1.35, 1.85, 0)
+], 45, 0x5fd0ff, 0.075, 0.55, { jitter:0.06, opacity:0.95 });
+
+// Hot flow (orange) — enters bottom, flows through AMR, exits bottom-opposite
+const magHotFlow = new Flow([
+  new THREE.Vector3(0, -1.85, 0),
+  new THREE.Vector3(0, -1.20, 0),
+  new THREE.Vector3(0.0, -0.62, 0),
+  new THREE.Vector3(-1.35, -0.62, 0),
+  new THREE.Vector3(-1.35, -1.20, 0),
+  new THREE.Vector3(-1.35, -1.85, 0)
+], 45, 0xff9a5c, 0.075, 0.55, { jitter:0.06, opacity:0.95 });
+
+/* ---- Magnetic field lines (visual hints of the rotating field) ---- */
+const fieldLines = new THREE.Group();
+magnetic.add(fieldLines);
+for (let i = 0; i < 6; i++) {
+  const angle = (i / 6) * Math.PI * 2;
+  const curve = new THREE.EllipseCurve(
+    0, 0,
+    0.72, 1.05,
+    0, Math.PI * 2,
+    false, 0
+  );
+  const pts = curve.getPoints(40).map(p => new THREE.Vector3(p.x, p.y, 0));
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const line = new THREE.Line(geo,
+    new THREE.LineBasicMaterial({ color:0x7fb8ff, transparent:true, opacity:0.35 }));
+  line.rotation.x = angle;
+  fieldLines.add(line);
+}
+fieldLines.visible = false;
+
+/* ---- Label ---- */
+const lblMag = makeLabel('تبريد مغناطيسي', '#ff8a5c', 3.4);
+lblMag.position.set(-8.2, 6.6, 0); unit.add(lblMag);
+
+/* ---------- [3] PCM TANK ---------- */
+const pcmGroup = new THREE.Group();
+pcmGroup.position.set(-3.3, 3.0, 0);
+unit.add(pcmGroup);
+
+const pcmShellMat = new THREE.MeshStandardMaterial({
+  color:0x9fd8ff, roughness:0.12, metalness:0.9,
+  transparent:true, opacity:0.28, side:THREE.DoubleSide
+});
+const tank = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, 3.2, 48, 1, true), pcmShellMat);
+pcmGroup.add(tank);
+
+const pcmFluidMat = new THREE.MeshStandardMaterial({
+  color:0x2ad8a0, roughness:0.3, metalness:0.2,
+  emissive:0x10c080, emissiveIntensity:0.85, transparent:true, opacity:0.9
+});
+const pcmFluid = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 2.9, 40), pcmFluidMat);
+pcmGroup.add(pcmFluid);
+
+const bubblesGroup = new THREE.Group();
+for(let i=0;i<40;i++){
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.02+Math.random()*0.05, 6, 6),
+    new THREE.MeshBasicMaterial({ color:0xaaffdd, transparent:true, opacity:0.6 }));
+  const a = Math.random()*Math.PI*2;
+  const r = Math.random()*0.9;
+  b.position.set(Math.cos(a)*r, -1.3+Math.random()*2.6, Math.sin(a)*r);
+  b.userData.speed = 0.2 + Math.random()*0.5;
+  bubblesGroup.add(b);
+}
+pcmGroup.add(bubblesGroup);
+bubblesGroup.visible = false;
+
+const pcmTop = cyl(1.3,1.3,0.16, 0x2a5a7a, { rough:0.3, metal:0.95 }); pcmTop.position.y = 1.65; pcmGroup.add(pcmTop);
+const pcmBot = cyl(1.3,1.3,0.16, 0x2a5a7a, { rough:0.3, metal:0.95 }); pcmBot.position.y = -1.65; pcmGroup.add(pcmBot);
+
+const coilCurvePts = [];
+for(let i=0;i<=120;i++){
+  const t = i/120, a = t*Math.PI*8;
+  coilCurvePts.push(new THREE.Vector3(Math.cos(a)*1.32, -1.4+t*2.8, Math.sin(a)*1.32));
+}
+const coil = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coilCurvePts), 240, 0.045, 8, false),
+  mat(0x30e0ff, { rough:0.25, metal:0.85, emissive:0x18a0d0, ei:0.9 }));
+pcmGroup.add(coil);
+
+const lblPcm = makeLabel('تخزين PCM', '#5cffb0', 3.0);
+lblPcm.position.set(-3.3, 6.2, 0); unit.add(lblPcm);
+
+/* ---------- [4] AI CONTROL ---------- */
+const aiBox = box(1.6, 1.0, 0.7, 0x0e2030, { rough:0.35, metal:0.85 });
+aiBox.position.set(-8.2, 1.25, 3.0); unit.add(aiBox);
+const aiScreen = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 0.72), new THREE.MeshBasicMaterial({ color:0x081822 }));
+aiScreen.position.set(-8.2, 1.25, 3.36); unit.add(aiScreen);
+
+const screenCanvas = document.createElement('canvas'); screenCanvas.width=512; screenCanvas.height=256;
+const sctx = screenCanvas.getContext('2d');
+const screenTex = new THREE.CanvasTexture(screenCanvas);
+aiScreen.material.map = screenTex; aiScreen.material.needsUpdate = true;
+
+const dataNodesGroup = new THREE.Group();
+for(let i=0;i<12;i++){
+  const n = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8),
+    new THREE.MeshBasicMaterial({ color:0xffd75c }));
+  n.position.set(-8.2 + (Math.random()-0.5)*2.4, 2.3+Math.random()*1.2, 3.0 + (Math.random()-0.5)*2);
+  n.userData.phase = Math.random()*Math.PI*2;
+  dataNodesGroup.add(n);
+}
+unit.add(dataNodesGroup);
+dataNodesGroup.visible = false;
+
+const leds = [];
+for(let i=0;i<4;i++){
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 12),
+    new THREE.MeshBasicMaterial({ color:[0x5cffb0,0x7fe9ff,0xffd75c,0xff7a5c][i] }));
+  led.position.set(-8.2-0.5+i*0.28, 1.62, 3.36);
+  unit.add(led); leds.push({ mesh: led, t:i*1.3 });
+}
+
+const lblAI = makeLabel('ذكاء اصطناعي', '#ffd75c', 3.0);
+lblAI.position.set(-8.2, 2.15, 3.0); unit.add(lblAI);
+
+/* ---------- [5] RADIATIVE PANELS ---------- */
+const panelsGroup = new THREE.Group(); unit.add(panelsGroup);
+const panelPositions = [-15.2, -13.4, -11.6, -9.8, -8.0, -6.2, -4.4, -2.6];
+const panelMeshes = [];
+panelPositions.forEach((x) => {
+  const p = box(1.55, 0.07, 2.6, 0x0a1522, { rough:0.15, metal:0.95, emissive:0x3a1a6a, ei:0.55 });
+  p.position.set(x, 6.0, 0); panelsGroup.add(p);
+
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.45, 2.5),
+    new THREE.MeshBasicMaterial({ color:0xa06bff, transparent:true, opacity:0.28,
+      blending:THREE.AdditiveBlending, depthWrite:false }));
+  glow.rotation.x = -Math.PI/2; glow.position.set(x, 6.05, 0); panelsGroup.add(glow);
+  panelMeshes.push({ p, glow });
+
+  for(const s of [-1,1]){
+    const leg = box(0.08, 1.2, 0.08, 0x1a3a52, { rough:0.4, metal:0.9 });
+    leg.position.set(x, 5.4, s*1.0); panelsGroup.add(leg);
+  }
+});
+const lblPanel = makeLabel('تبريد إشعاعي فضائي', '#c48bff', 3.8);
+lblPanel.position.set(-9.0, 7.2, 0); unit.add(lblPanel);
+
+/* ============================================================
+   DUCTS
+   ============================================================ */
+const airPathPts = [
+  new THREE.Vector3(8, 3.0, 3.5),
+  new THREE.Vector3(2.5, 3.0, 3.5),
+  new THREE.Vector3(-3.3, 3.0, 3.5),
+  new THREE.Vector3(-8.2, 3.0, 3.5),
+  new THREE.Vector3(-13.0, 3.0, 3.5),
+  new THREE.Vector3(-13.0, 3.0, 1.9),
+  new THREE.Vector3(-13.0, 3.0, 0),
+  new THREE.Vector3(-8.2, 3.0, 0),
+  new THREE.Vector3(-3.3, 3.0, 0),
+  new THREE.Vector3(-1.5, 3.0, 0),
+  new THREE.Vector3(2.0, 3.0, 0),
+  new THREE.Vector3(6.5, 3.0, 0)
+];
+(function(){
+  const shellCurve = new THREE.CatmullRomCurve3(airPathPts);
+  const shellGeo = new THREE.TubeGeometry(shellCurve, 260, 0.55, 14, false);
+  const shellMat = new THREE.MeshStandardMaterial({
+    color:0x14314a, roughness:0.35, metalness:0.9,
+    emissive:0x0a2035, emissiveIntensity:0.35,
+    transparent:true, opacity:0.55
+  });
+  unit.add(new THREE.Mesh(shellGeo, shellMat));
+})();
+
+const waterPathPts = [
+  new THREE.Vector3(-8.2, 1.6, 0),
+  new THREE.Vector3(-5.8, 1.6, 0),
+  new THREE.Vector3(-3.3, 1.6, 0),
+  new THREE.Vector3(-3.3, 3.0, 1.4),
+  new THREE.Vector3(-5.8, 3.6, 1.4),
+  new THREE.Vector3(-8.2, 3.6, 1.4),
+  new THREE.Vector3(-8.2, 1.6, 0)
+];
+(function(){
+  const c = new THREE.CatmullRomCurve3(waterPathPts);
+  const g = new THREE.TubeGeometry(c, 128, 0.075, 12, false);
+  unit.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({
+    color:0x2aa8ff, roughness:0.25, metalness:0.9,
+    emissive:0x2aa8ff, emissiveIntensity:0.65,
+    transparent:true, opacity:0.45
+  })));
+})();
+
+/* ============================================================
+   FLOWS
+   ============================================================ */
+const flowReturn = new Flow([
+  new THREE.Vector3(8, 3.0, 3.5),
+  new THREE.Vector3(2.5, 3.0, 3.5),
+  new THREE.Vector3(-3.3, 3.0, 3.5),
+  new THREE.Vector3(-8.2, 3.0, 3.5),
+  new THREE.Vector3(-13.0, 3.0, 3.5),
+  new THREE.Vector3(-13.0, 3.0, 1.9)
+], 130, 0xff7a3c, 0.14, 0.10, { jitter:0.28 });
+
+const flowDry = new Flow([
+  new THREE.Vector3(-13.0, 3.0, 1.9),
+  new THREE.Vector3(-13.0, 3.0, 0),
+  new THREE.Vector3(-10.6, 3.0, 0),
+  new THREE.Vector3(-9.9, 3.0, 0)
+], 80, 0xffb066, 0.13, 0.15, { jitter:0.22 });
+
+const flowCold1 = new Flow([
+  new THREE.Vector3(-6.4, 3.0, 0),
+  new THREE.Vector3(-5.0, 3.0, 0),
+  new THREE.Vector3(-4.5, 3.0, 0)
+], 70, 0x9fe8ff, 0.13, 0.20, { jitter:0.2 });
+
+const flowSupply = new Flow([
+  new THREE.Vector3(-2.5, 3.0, 0),
+  new THREE.Vector3(-1.5, 3.0, 0),
+  new THREE.Vector3(2.0, 3.0, 0),
+  new THREE.Vector3(6.5, 3.0, 0),
+  new THREE.Vector3(9.0, 3.2, 0),
+  new THREE.Vector3(11.0, 3.8, 0)
+], 140, 0x5cffb0, 0.16, 0.13, { jitter:0.3, opacity:1 });
+
+const flowInside = new Flow([
+  new THREE.Vector3(9.0, 3.2, 0),
+  new THREE.Vector3(9.0, 5.5, 1.5),
+  new THREE.Vector3(8.0, 6.5, -2.0),
+  new THREE.Vector3(6.5, 5.0, -3.0),
+  new THREE.Vector3(7.0, 2.5, -3.0)
+], 90, 0x7fe9ff, 0.14, 0.06, { jitter:0.85, opacity:0.75 });
+
+const irFlows = [];
+for (let i=0;i<panelPositions.length;i++){
+  const x = panelPositions[i];
+  irFlows.push(new Flow([
+    new THREE.Vector3(x, 6.1, -1.0),
+    new THREE.Vector3(x, 6.1, 1.0),
+    new THREE.Vector3(x, 8.5, 0.2),
+    new THREE.Vector3(x, 12.5, 0),
+    new THREE.Vector3(x, 18, 0)
+  ], 26, 0xc06bff, 0.16, 0.08, { jitter:0.35 }));
+}
+
+const flowWater = new Flow(waterPathPts, 90, 0x66d9ff, 0.09, 0.28, { jitter:0.05 });
+
+const flowVapor = new Flow([
+  new THREE.Vector3(-13.0, 4.3, 0),
+  new THREE.Vector3(-14.5, 5.2, 1.5),
+  new THREE.Vector3(-16.5, 6.5, 3.0),
+  new THREE.Vector3(-18.5, 8.5, 4.5)
+], 40, 0x9fd8ff, 0.12, 0.09, { jitter:0.45, opacity:0.55 });
+
+const flows = [flowReturn, flowDry, flowCold1, flowSupply, flowInside, flowWater, flowVapor, ...irFlows];
+
+/* ============================================================
+   STEPS
+   ============================================================ */
+const steps = [
+  { badge:'00', color:'#7fe9ff', title:'نظرة عامة على النظام',
+    desc:'خمس تقنيات تعمل معاً في دورة مغلقة لتبريد المبنى بدون ضاغط وبدون غاز تبريد.',
+    facts:[['التقنيات','5 في نظام واحد'],['الضاغط','0 وحدة'],['غاز التبريد','0 كجم'],['الوفر','70-80%']],
+    camPos: new THREE.Vector3(2, 14, 26), camTarget: new THREE.Vector3(-3, 3.5, 0),
+    highlight: null, detailGroups: [] },
+
+  { badge:'01', color:'#7fe9ff', title:'التجفيف الشمسي',
+    desc:'عجلة السيليكا جل الدوارة تمتص الرطوبة، ولوح شمسي يجدّدها. يخفض الحمل الكامن قبل التبريد.',
+    facts:[['المادة الماصة','سيليكا جل'],['حرارة التجديد','60-80 °C'],['خفض الرطوبة','~40%'],['استهلاك','0.02 kW']],
+    camPos: new THREE.Vector3(-12.8, 4.5, 7.5), camTarget: new THREE.Vector3(-13.0, 3.2, 0),
+    highlight: 'desiccant', detailGroups: ['beads'] },
+
+  { badge:'02', color:'#ff8a5c', title:'التبريد المغناطيسي',
+    desc:'دائرة مغناطيسية دوارة تُعرّض المجدد المغناطيسي (AMR) لمجال مغناطيسي متغير دورياً. التأثير المغناطيسي الحراري يسخن ويبرد المادة، ومائع هيدروليكي متزامن ينقل الحرارة إلى خزان PCM.',
+    facts:[['المادة','Gd-Si-Ge'],['المجال','1.2-1.5 T'],['ΔT للدورة','~12 °C'],['ضاغط','لا يوجد']],
+    camPos: new THREE.Vector3(-8.2, 4.0, 5.2), camTarget: new THREE.Vector3(-8.2, 3.0, 0),
+    highlight: 'magnetic', detailGroups: ['layers'] },
+
+  { badge:'03', color:'#5cffb0', title:'خزان التخزين الحراري PCM',
+    desc:'مادة متغيرة الطور (شمع برافيني) تُشحن بالبرودة ليلاً وتُفرّغ نهاراً، مما يُزيح الذروة الكهربائية.',
+    facts:[['المادة','Paraffin RT-12'],['السعة','20 لتر'],['حرارة الانصهار','12 °C'],['خفض الذروة','~50%']],
+    camPos: new THREE.Vector3(-3.3, 4.2, 6.2), camTarget: new THREE.Vector3(-3.3, 3.0, 0),
+    highlight: 'pcm', detailGroups: ['bubbles'] },
+
+  { badge:'04', color:'#c48bff', title:'التبريد الإشعاعي الفضائي',
+    desc:'ألواح ذات نافذية عالية في نافذة 8-13 ميكرومتر تُشع الحرارة مباشرة إلى الفضاء البارد (3K) بلا كهرباء.',
+    facts:[['النافذة','8-13 µm'],['الطاقة المُشعة','~80 W/m²'],['خفض حراري','5-10 °C'],['استهلاك','0 W']],
+    camPos: new THREE.Vector3(-9, 10, 10), camTarget: new THREE.Vector3(-9, 6.5, 0),
+    highlight: 'panels', detailGroups: [] },
+
+  { badge:'05', color:'#ffd75c', title:'الذكاء الاصطناعي والتوزيع',
+    desc:'وحدة AI تقرأ الحساسات وتتنبأ بالطلب وتُحسّن التوزيع. الهواء البارد يُدفع عبر مجرى الإمداد إلى المبنى.',
+    facts:[['نموذج التحكم','AI Prediction'],['حساسات','12 نقطة'],['الاستجابة','< 1 ث'],['وفر إضافي','15-25%']],
+    camPos: new THREE.Vector3(2, 8, 14), camTarget: new THREE.Vector3(2, 3.5, 0),
+    highlight: 'ai', detailGroups: ['nodes'] }
+];
+
+let currentStep = 0;
+let autoTour = false;
+let tourTimer = 0;
+let camTween = null;
+
+function flyTo(pos, target, dur=1.6) {
+  camTween = {
+    fromPos: camera.position.clone(), toPos: pos.clone(),
+    fromTgt: controls.target.clone(), toTgt: target.clone(),
+    t: 0, dur
+  };
+}
+
+function setStep(i, fromTour=false) {
+  i = Math.max(0, Math.min(steps.length-1, i));
+  currentStep = i;
+  const s = steps[i];
+
+  document.querySelectorAll('.step-btn').forEach((b,idx) => {
+    b.classList.toggle('active', idx === i);
+    b.classList.toggle('done', idx < i);
+  });
+  document.querySelectorAll('.step-line').forEach((l,idx) => {
+    l.classList.toggle('done', idx < i);
+  });
+
+  const info = document.getElementById('infoCard');
+  document.getElementById('infoBadge').textContent = s.badge;
+  document.getElementById('infoBadge').style.background = `${s.color}22`;
+  document.getElementById('infoBadge').style.color = s.color;
+  document.getElementById('infoBadge').style.border = `1px solid ${s.color}66`;
+  document.getElementById('infoTitle').textContent = s.title;
+  document.getElementById('infoTitle').style.color = s.color;
+  document.getElementById('infoDesc').textContent = s.desc;
+  const factsEl = document.getElementById('infoFacts');
+  factsEl.innerHTML = '';
+  s.facts.forEach(([k,v]) => {
+    const d = document.createElement('div');
+    d.className = 'fact'; d.style.color = s.color;
+    d.innerHTML = `<span class="k">${k}</span><span class="v" style="color:${s.color}">${v}</span>`;
+    factsEl.appendChild(d);
+  });
+
+  if (!document.body.classList.contains('ui-hidden')) {
+    info.classList.add('show');
+  }
+
+  document.getElementById('vignette').classList.toggle('focus', i !== 0);
+
+  flyTo(s.camPos, s.camTarget, fromTour ? 2.4 : 1.6);
+
+  beadsGroup.visible = s.detailGroups.includes('beads');
+  layersGroup.visible = s.detailGroups.includes('layers');
+  bubblesGroup.visible = s.detailGroups.includes('bubbles');
+  dataNodesGroup.visible = s.detailGroups.includes('nodes');
+  fieldLines.visible = (s.highlight === 'magnetic');
+
+  flows.forEach(f => f.setHighlight(false));
+  if (s.highlight === 'desiccant') { flowReturn.setHighlight(true); flowDry.setHighlight(true); flowVapor.setHighlight(true); }
+  if (s.highlight === 'magnetic') {
+    flowDry.setHighlight(true); flowCold1.setHighlight(true); flowWater.setHighlight(true);
+    magColdFlow.setHighlight(true); magHotFlow.setHighlight(true);
+  }
+  if (s.highlight === 'pcm') { flowCold1.setHighlight(true); flowSupply.setHighlight(true); flowWater.setHighlight(true); }
+  if (s.highlight === 'panels') { irFlows.forEach(f => f.setHighlight(true)); }
+  if (s.highlight === 'ai') { flowSupply.setHighlight(true); flowInside.setHighlight(true); }
+
+  if (fromTour) showToast(s.title);
+}
+
+function showToast(txt){
+  const t = document.getElementById('toast');
+  t.textContent = txt;
+  t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+/* ============================================================
+   UI INTERACTIONS
+   ============================================================ */
+document.querySelectorAll('.step-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    setStep(parseInt(b.dataset.step));
+    autoTour = false;
+    document.getElementById('btnTour').classList.remove('active');
+    document.getElementById('btnTour').textContent = '▶ جولة تلقائية';
+  });
+});
+
+document.getElementById('btnCloseInfo').addEventListener('click', () => {
+  document.getElementById('infoCard').classList.remove('show');
+});
+
+document.querySelectorAll('[data-toggle]').forEach(el => {
+  el.addEventListener('click', () => {
+    const panel = document.getElementById(el.dataset.toggle);
+    if (panel) panel.classList.toggle('collapsed');
+  });
+});
+
+function toggleUi(){
+  document.body.classList.toggle('ui-hidden');
+  const hidden = document.body.classList.contains('ui-hidden');
+  if (hidden) {
+    document.getElementById('infoCard').classList.remove('show');
+  } else {
+    if (steps[currentStep]) document.getElementById('infoCard').classList.add('show');
+  }
+}
+document.getElementById('btnHideUi').addEventListener('click', toggleUi);
+document.getElementById('showUiBtn').addEventListener('click', toggleUi);
+
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.key >= '0' && e.key <= '5') setStep(parseInt(e.key));
+  if (e.key === 'ArrowRight') setStep(currentStep - 1);
+  if (e.key === 'ArrowLeft') setStep(currentStep + 1);
+  if (e.key === 'Escape') setStep(0);
+  if (e.key === 'h' || e.key === 'H') toggleUi();
+});
+
+/* ============================================================
+   CONTROLS
+   ============================================================ */
+let paused = false;
+let simSpeed = 1.0;
+let shellOpacity = 0.55;
+
+function togglePlay() {
+  paused = !paused;
+  document.getElementById('btnPlay').textContent = paused ? '▶ تشغيل' : '⏸ إيقاف';
+  document.getElementById('btnPlay').classList.toggle('active', paused);
+}
+document.getElementById('btnPlay').addEventListener('click', togglePlay);
+document.getElementById('btnReset').addEventListener('click', () => {
+  setStep(0);
+  autoTour = false;
+  document.getElementById('btnTour').classList.remove('active');
+  document.getElementById('btnTour').textContent = '▶ جولة تلقائية';
+  camera.position.set(2, 14, 26);
+  controls.target.set(-3, 3.5, 0);
+  camTween = null;
+  showToast('تمت إعادة الضبط');
+});
+document.getElementById('btnTour').addEventListener('click', () => {
+  autoTour = !autoTour;
+  const btn = document.getElementById('btnTour');
+  btn.classList.toggle('active', autoTour);
+  if (autoTour) {
+    tourTimer = 0;
+    setStep(1, true);
+    btn.textContent = '⏹ إيقاف الجولة';
+  } else {
+    btn.textContent = '▶ جولة تلقائية';
+  }
+});
+
+document.getElementById('speedSlider').addEventListener('input', (e) => {
+  simSpeed = parseFloat(e.target.value);
+  document.getElementById('speedVal').textContent = simSpeed.toFixed(1) + '×';
+});
+document.getElementById('opacitySlider').addEventListener('input', (e) => {
+  shellOpacity = parseFloat(e.target.value) / 100;
+  document.getElementById('opacityVal').textContent = Math.round(shellOpacity*100) + '%';
+  bShell.material.opacity = shellOpacity;
+  mHousingMat.opacity = shellOpacity * 0.60;
+  pcmShellMat.opacity = shellOpacity * 0.5;
+  wheelMat.opacity = 0.4 + shellOpacity * 0.6;
+  wheelMat.transparent = true;
+});
+
+/* ============================================================
+   AI SCREEN CANVAS
+   ============================================================ */
+function updateScreenCanvas(t){
+  const w = screenCanvas.width, h = screenCanvas.height;
+  sctx.fillStyle = '#04121f'; sctx.fillRect(0,0,w,h);
+  sctx.fillStyle = '#5cffb0';
+  sctx.font = 'bold 22px monospace';
+  sctx.fillText('QB-AI CORE', 16, 30);
+  sctx.fillStyle = '#3aa8ff';
+  sctx.font = '14px monospace';
+  sctx.fillText('STATUS: OPTIMAL', 16, 52);
+  sctx.fillText('EFF: 94.2%', 320, 52);
+  sctx.strokeStyle = '#7fe9ff'; sctx.lineWidth = 2;
+  sctx.beginPath();
+  for(let x=0;x<w-32;x++){
+    const xx = 16 + x;
+    const y = 100 + Math.sin((x*0.04)+t*3)*14 + Math.sin((x*0.13)+t*5)*6;
+    if(x===0) sctx.moveTo(xx, y); else sctx.lineTo(xx, y);
+  }
+  sctx.stroke();
+  sctx.fillStyle = '#5cffb0';
+  for(let i=0;i<10;i++){
+    const bh = 20 + Math.abs(Math.sin(t*2+i*0.7))*40;
+    sctx.fillRect(20+i*48, 230-bh, 26, bh);
+  }
+  const sy = ((t*40) % h);
+  sctx.fillStyle = 'rgba(90,200,255,0.06)';
+  sctx.fillRect(0, sy, w, 24);
+  screenTex.needsUpdate = true;
+}
+
+/* ============================================================
+   CHART
+   ============================================================ */
+const chartCanvas = document.getElementById('chartCanvas');
+const cctx = chartCanvas.getContext('2d');
+const chartHistory = { ret: [], sup: [] };
+const CHART_MAX = 90;
+function drawChart(){
+  const w = chartCanvas.width, h = chartCanvas.height;
+  cctx.clearRect(0,0,w,h);
+  cctx.strokeStyle = 'rgba(80,200,255,0.08)'; cctx.lineWidth = 1;
+  for(let i=0;i<=3;i++){
+    const y = (h/3)*i;
+    cctx.beginPath(); cctx.moveTo(0,y); cctx.lineTo(w,y); cctx.stroke();
+  }
+  const drawLine = (arr, color) => {
+    if (arr.length < 2) return;
+    cctx.strokeStyle = color; cctx.lineWidth = 2;
+    cctx.shadowColor = color; cctx.shadowBlur = 5;
+    cctx.beginPath();
+    const minV = 10, maxV = 36;
+    arr.forEach((v,i) => {
+      const x = (i/(CHART_MAX-1)) * w;
+      const y = h - ((v - minV)/(maxV - minV)) * h;
+      if(i===0) cctx.moveTo(x,y); else cctx.lineTo(x,y);
+    });
+    cctx.stroke();
+    cctx.shadowBlur = 0;
+  };
+  drawLine(chartHistory.ret, '#ff7a3c');
+  drawLine(chartHistory.sup, '#5cffb0');
+}
+
+/* ============================================================
+   ANIMATION
+   ============================================================ */
+const clock = new THREE.Clock();
+let simTime = 0;
+let lastChartSample = 0;
+const data = { ret:32.4, dry:30.1, mag:18.6, pcm:14.2, sup:13.8, cop:7.4, save:78 };
+
+function animate(){
+  requestAnimationFrame(animate);
+  const rawDt = Math.min(clock.getDelta(), 0.05);
+  const dt = paused ? 0 : rawDt * simSpeed;
+  simTime += dt;
+
+  if(!paused){
+    wheel.rotation.x += dt * 0.55;
+    /* ✅ Rotating magnetic circuit — the core mechanism from the video */
+    magnetCarrier.rotation.x += dt * 1.30;
+  }
+
+  /* ✅ AMR layers heat/cool based on the rotating field */
+  const coreTemp = 0.5 + 0.5*Math.sin(simTime*2.2);
+  const hotC = new THREE.Color(0xff5a2a);
+  const coldC = new THREE.Color(0x40ddff);
+  const c = coldC.clone().lerp(hotC, coreTemp);
+  coreMat.color.copy(c);
+  coreMat.emissive.copy(c);
+  coreMat.emissiveIntensity = 0.6 + 0.5*coreTemp;
+
+  /* Pulse the AMR layer discs in sync with the thermal cycle */
+  amrLayerMeshes.forEach((layer, i) => {
+    const phase = (i / AMR_LAYERS) * Math.PI * 2;
+    const pulse = 0.5 + 0.5 * Math.sin(simTime * 2.2 + phase);
+    const cc = coldC.clone().lerp(hotC, pulse);
+    layer.material.emissive.copy(cc);
+    layer.material.emissiveIntensity = 0.35 + 0.55 * pulse;
+  });
+
+  /* Magnet segments pulse with the field strength */
+  magnetSegments.forEach((seg, i) => {
+    const pulse = 0.55 + 0.45 * Math.abs(Math.sin(simTime * 1.5 + i * 0.7));
+    seg.material.emissiveIntensity = pulse;
+  });
+
+  const pcmPulse = 0.5 + 0.5*Math.sin(simTime*0.7);
+  pcmFluidMat.emissiveIntensity = 0.55 + 0.6*pcmPulse;
+  pcmFluidMat.color.setHSL(0.42 + 0.08*(1-pcmPulse), 0.85, 0.55);
+
+  panelMeshes.forEach((pm, i) => {
+    pm.glow.material.opacity = 0.18 + 0.22*Math.abs(Math.sin(simTime*1.1 + i*0.5));
+    pm.p.material.emissiveIntensity = 0.35 + 0.4*Math.abs(Math.sin(simTime*1.1 + i*0.5));
+  });
+
+  leds.forEach(l => {
+    l.t += rawDt;
+    const on = (Math.sin(l.t*4) > 0);
+    l.mesh.scale.setScalar(on ? 1 : 0.5);
+  });
+
+  if(bubblesGroup.visible){
+    bubblesGroup.children.forEach(b => {
+      b.position.y += dt * b.userData.speed * 0.5;
+      if(b.position.y > 1.3) b.position.y = -1.3;
+    });
+  }
+  if(dataNodesGroup.visible){
+    dataNodesGroup.children.forEach(n => {
+      n.userData.phase += rawDt * 2;
+      const s = 0.7 + 0.5*Math.sin(n.userData.phase);
+      n.scale.setScalar(s);
+    });
+  }
+
+  for (const f of flows) f.update(dt);
+  /* ✅ Update the two magnetocaloric hydraulic flows */
+  magColdFlow.update(dt);
+  magHotFlow.update(dt);
+  updateScreenCanvas(simTime);
+
+  const t = simTime;
+  data.ret = 32.4 + Math.sin(t*0.8)*0.9 + Math.sin(t*2.3)*0.25;
+  data.dry = 30.1 + Math.sin(t*0.9+0.5)*0.7;
+  data.mag = 18.6 + Math.sin(t*1.7+1.1)*1.6;
+  data.pcm = 14.2 + Math.sin(t*0.6+2.2)*0.5;
+  data.sup = 13.8 + Math.sin(t*1.2+0.3)*0.6;
+  data.cop = 7.0 + Math.sin(t*0.5)*0.6;
+  data.save = 76 + Math.sin(t*0.4)*3;
+
+  document.getElementById('t-return').textContent = data.ret.toFixed(1) + ' °C';
+  document.getElementById('t-dry').textContent    = data.dry.toFixed(1) + ' °C';
+  document.getElementById('t-mag').textContent    = data.mag.toFixed(1) + ' °C';
+  document.getElementById('t-pcm').textContent    = data.pcm.toFixed(1) + ' °C';
+  document.getElementById('t-supply').textContent = data.sup.toFixed(1) + ' °C';
+  document.getElementById('cop').textContent      = data.cop.toFixed(2);
+  document.getElementById('save').textContent     = data.save.toFixed(0) + ' %';
+  document.getElementById('bar-save').style.width = data.save.toFixed(0) + '%';
+
+  lastChartSample += rawDt;
+  if(lastChartSample > 0.15){
+    lastChartSample = 0;
+    chartHistory.ret.push(data.ret);
+    chartHistory.sup.push(data.sup);
+    if(chartHistory.ret.length > CHART_MAX) chartHistory.ret.shift();
+    if(chartHistory.sup.length > CHART_MAX) chartHistory.sup.shift();
+    drawChart();
+  }
+
+  if(camTween){
+    camTween.t += rawDt;
+    const p = Math.min(1, camTween.t / camTween.dur);
+    const e = p<0.5 ? 4*p*p*p : 1 - Math.pow(-2*p+2,3)/2;
+    camera.position.lerpVectors(camTween.fromPos, camTween.toPos, e);
+    controls.target.lerpVectors(camTween.fromTgt, camTween.toTgt, e);
+    if(p >= 1) camTween = null;
+  }
+
+  if(autoTour && !camTween){
+    tourTimer += rawDt;
+    if(tourTimer > 6){
+      tourTimer = 0;
+      let next = currentStep + 1;
+      if(next >= steps.length) next = 1;
+      setStep(next, true);
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+/* ============================================================
+   RESIZE
+   ============================================================ */
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+/* ============================================================
+   INTRO
+   ============================================================ */
+(function intro(){
+  const start = performance.now();
+  const from = new THREE.Vector3(26, 24, 34);
+  const to   = new THREE.Vector3(2, 14, 26);
+  camera.position.copy(from);
+  function step(){
+    const t = Math.min(1, (performance.now()-start)/2600);
+    const e = 1 - Math.pow(1-t, 3);
+    camera.position.lerpVectors(from, to, e);
+    if(t < 1) requestAnimationFrame(step);
+  }
+  step();
+})();
+
+/* ============================================================
+   START
+   ============================================================ */
+setStep(0);
+animate();
+showToast('اضغط "جولة" أو استخدم مفاتيح 1-6 · H لإخفاء الواجهة');
+
+for(let i=0;i<CHART_MAX;i++){
+  chartHistory.ret.push(32 + Math.sin(i*0.3)*1.2);
+  chartHistory.sup.push(14 + Math.sin(i*0.4)*0.8);
+}
+drawChart();
+</script>
+</body>
+</html>
